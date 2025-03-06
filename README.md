@@ -1,108 +1,53 @@
-# Transcribe
+# Video Transcriber
 
-
-
----
-
-```markdown
-# Video to Transcription Converter
-
-This Python script extracts audio from a video file, splits the audio into manageable chunks, transcribes each chunk using Google's Speech Recognition API, and saves the combined transcription into a text file.
+This Python script extracts audio from a video file and transcribes it using either OpenAI Whisper or Google SpeechRecognition. Users can choose between these two transcription tools or run both simultaneously for comparison.
 
 ## Features
-
-- **Audio Extraction**: Uses `ffmpeg` to extract audio from video files.
-- **Chunking**: Splits long audio into smaller segments (default 60 seconds per chunk) for efficient processing.
-- **Speech Recognition**: Transcribes audio using the `speech_recognition` library with Google's Speech-to-Text API.
-- **Temporary File Management**: Automatically creates and cleans up temporary audio files.
+- Extracts audio from video files using `ffmpeg`.
+- Transcribes audio using:
+  - **OpenAI Whisper** (Local AI-based transcription)
+  - **Google SpeechRecognition** (Cloud-based API)
+- Runs transcriptions in parallel for improved speed.
+- Displays real-time progress bars for transcription.
+- Saves transcriptions to a text file in the same directory as the original video.
 
 ## Requirements
-
-- **Python 3.6+**
-- **ffmpeg**  
-  Make sure `ffmpeg` is installed and added to your system's PATH. You can download it from [ffmpeg.org](https://ffmpeg.org/download.html).
-
-- **Python Libraries**
-  - [SpeechRecognition](https://pypi.org/project/SpeechRecognition/)
-  - [pydub](https://pypi.org/project/pydub/)
-
-Install the required Python libraries using pip:
-
+Make sure you have the following dependencies installed:
 ```bash
-pip install SpeechRecognition pydub
+pip install speechrecognition pydub whisper tqdm
+```
+Additionally, ensure `ffmpeg` is installed:
+```bash
+sudo apt install ffmpeg  # Linux
+brew install ffmpeg  # macOS
+winget install ffmpeg  # Windows
 ```
 
 ## Usage
+Run the script and provide the video file path:
+```bash
+python video_transcriber.py
+```
+Then, select the transcription method:
+1. **OpenAI Whisper**
+2. **Google SpeechRecognition**
+3. **Both (Simultaneously)**
 
-1. **Run the Script**
+## Output
+The transcriptions are saved as:
+- `{video_filename}_Whisper_transcription.txt`
+- `{video_filename}_SpeechRecognition_transcription.txt`
 
-   Execute the script from your terminal or command prompt:
+These files will be located in the same directory as the video.
 
-   ```bash
-   python your_script_name.py
-   ```
-
-2. **Provide Video File**
-
-   When prompted, enter the full path to your video file (including its extension).
-
-3. **Processing**
-
-   The script will:
-   - Extract the audio from your video file using `ffmpeg`.
-   - Split the extracted WAV audio into 60-second chunks.
-   - Transcribe each chunk using Google’s Speech Recognition API.
-   - Save the complete transcription in a text file located in the same directory as your video.
-
-4. **Output**
-
-   The transcription will be saved as `video_basename_transcription.txt` (where `video_basename` is the name of your video file without its extension).
-
-## Code Overview
-
-- **Audio Extraction**:  
-  The script uses `ffmpeg` to convert the video file into a temporary WAV audio file.
-  
-- **Chunking**:  
-  The `transcribe_long_audio` function utilizes `pydub` to split the audio into chunks, which are then individually transcribed.
-  
-- **Transcription**:  
-  Each audio chunk is transcribed using the `speech_recognition` library’s `recognize_google` method.
-  
-- **Cleanup**:  
-  Temporary files created during the process are removed once they are no longer needed.
-
-## Customization
-
-- **Chunk Length**:  
-  You can change the duration of each audio chunk by modifying the `chunk_length` parameter in the `transcribe_long_audio` function.
-
-- **Language**:  
-  The default transcription language is set to English (US). To use a different language, change the `language` parameter in the `recognize_google` method.
-
-## Troubleshooting
-
-- **ffmpeg Not Found**:  
-  Ensure that `ffmpeg` is installed and correctly added to your system’s PATH.
-  
-- **Empty Audio File**:  
-  If the extracted audio file is empty, verify that the video contains an audio track.
-  
-- **Speech Recognition Errors**:  
-  Check your internet connection as the script uses Google's Speech-to-Text API. Review console output for any error messages.
+## Notes
+- **Whisper is recommended** for high accuracy but requires a capable system.
+- **Google SpeechRecognition** is cloud-based and may be slower.
+- Parallel processing has been implemented to speed up Google transcription.
 
 ## License
+This project is open-source and free to use under the MIT license.
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+## Author
+Developed by [Your Name].
 
-## Acknowledgments
-
-- [Google Speech Recognition API](https://cloud.google.com/speech-to-text)
-- [ffmpeg](https://ffmpeg.org/)
-- [pydub](https://github.com/jiaaro/pydub)
-- [SpeechRecognition](https://github.com/Uberi/speech_recognition)
-```
-
----
-
-Feel free to modify the sections as needed to better fit your project's details or add any additional instructions you might have.
