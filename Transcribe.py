@@ -1,30 +1,51 @@
 import subprocess
-import speech_recognition as sr
 import os
 import tempfile
-from pydub import AudioSegment
+import time
 import math
+import speech_recognition as sr
+from pydub import AudioSegment
+import whisper
+from tqdm import tqdm
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
-def transcribe_long_audio(audio_file, chunk_length=60):
-    """
-    Split the audio into chunks, transcribe each, and return the combined transcription.
-    """
+def extract_audio(video_file):
+    """Extracts audio from a video file using ffmpeg."""
+    temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    command = f'ffmpeg -i "{video_file}" -ac 1 -ar 16000 -q:a 0 -map a "{temp_wav.name}" -y'
+    try:
+        subprocess.run(command, shell=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print("Error running ffmpeg:", e)
+        os.unlink(temp_wav.name)
+        return None
+    return temp_wav.name
+
+def transcribe_whisper(audio_file, result_dict):
+    model = whisper.load_model("base")
+    print("Transcribing with Whisper... (this may take some time)")
+    
+    for i in tqdm(range(100), desc="Whisper Transcription Progress", unit="%", leave=False):
+        time.sleep(0.05)  # Simulate progress
+    
+    result = model.transcribe(audio_file, verbose=False)
+    result_dict["Whisper"] = result["text"]
+
+def transcribe_speech_recognition(audio_file, result_dict):
+    recognizer = sr.Recognizer()
     audio = AudioSegment.from_wav(audio_file)
     duration_ms = len(audio)
-    chunk_ms = chunk_length * 1000  # Convert seconds to milliseconds
+    chunk_ms = 15000  # Reduce chunk size to 15 seconds for faster parallel processing
     num_chunks = math.ceil(duration_ms / chunk_ms)
-    
-    recognizer = sr.Recognizer()
     transcriptions = []
     
-    print(f"Audio duration: {duration_ms/1000:.2f} seconds, splitting into {num_chunks} chunk(s).")
+    print(f"Splitting audio into {num_chunks} chunks for SpeechRecognition...")
     
-    for i in range(num_chunks):
+    def process_chunk(i):
         start_ms = i * chunk_ms
         end_ms = min((i + 1) * chunk_ms, duration_ms)
         chunk_audio = audio[start_ms:end_ms]
-        
-        # Save chunk to a temporary file
         chunk_filename = f"chunk_{i}.wav"
         chunk_audio.export(chunk_filename, format="wav")
         
@@ -32,61 +53,76 @@ def transcribe_long_audio(audio_file, chunk_length=60):
             audio_data = recognizer.record(source)
         
         try:
-            print(f"Transcribing chunk {i+1}/{num_chunks}...")
-            chunk_text = recognizer.recognize_google(audio_data, language="en-US")
+            text = recognizer.recognize_google(audio_data, language="en-US")
         except sr.UnknownValueError:
-            print(f"Chunk {i+1} not understood.")
-            chunk_text = ""
+            text = "[Unrecognized audio]"
         except sr.RequestError as e:
-            print(f"Chunk {i+1} request error: {e}")
-            chunk_text = f"Error: {e}"
+            text = f"[Error: {e}]"
         
-        transcriptions.append(chunk_text)
         os.remove(chunk_filename)
+        return text
     
-    return "\n".join(transcriptions)
+    with ThreadPoolExecutor() as executor:
+        results = list(tqdm(executor.map(process_chunk, range(num_chunks)), total=num_chunks, desc="Processing Audio for Google SpeechRecognition", unit="chunks", leave=False))
+    
+    result_dict["SpeechRecognition"] = " ".join(results)
 
-# Ask the user for the video file
-video_file = input("Please enter the video file path (including the extension): ")
+def save_transcription(video_file, transcribed_text, tool_name):
+    video_dir = os.path.dirname(video_file)
+    video_basename = os.path.splitext(os.path.basename(video_file))[0]
+    transcription_file = os.path.join(video_dir, f"{video_basename}_{tool_name}_transcription.txt")
+    with open(transcription_file, "w") as f:
+        f.write(transcribed_text)
+    print(f"Transcription saved to {transcription_file}")
 
-if not os.path.exists(video_file):
-    print("The file does not exist.")
-    exit(1)
+def main():
+    video_file = input("Enter the video file path: ")
+    if not os.path.exists(video_file):
+        print("The file does not exist.")
+        return
+    
+    print("Select transcription tool:")
+    print("1 - OpenAI Whisper")
+    print("2 - Google SpeechRecognition")
+    print("3 - Both (Simultaneously)")
+    choice = input("Enter the number: ")
+    
+    audio_file = extract_audio(video_file)
+    if not audio_file:
+        print("Failed to extract audio.")
+        return
+    
+    result_dict = {}  # Dictionary to store results
+    
+    if choice == "1":
+        start = time.time()
+        transcribe_whisper(audio_file, result_dict)
+        print(f"OpenAI Whisper took {time.time() - start:.2f} seconds.")
+        save_transcription(video_file, result_dict["Whisper"], "Whisper")
+    elif choice == "2":
+        start = time.time()
+        transcribe_speech_recognition(audio_file, result_dict)
+        print(f"Google SpeechRecognition took {time.time() - start:.2f} seconds.")
+        save_transcription(video_file, result_dict["SpeechRecognition"], "SpeechRecognition")
+    elif choice == "3":
+        start = time.time()
+        whisper_thread = threading.Thread(target=transcribe_whisper, args=(audio_file, result_dict))
+        speech_recognition_thread = threading.Thread(target=transcribe_speech_recognition, args=(audio_file, result_dict))
+        
+        whisper_thread.start()
+        speech_recognition_thread.start()
+        
+        whisper_thread.join()
+        speech_recognition_thread.join()
+        
+        print(f"Both transcriptions completed in {time.time() - start:.2f} seconds.")
+        save_transcription(video_file, result_dict["Whisper"], "Whisper")
+        save_transcription(video_file, result_dict["SpeechRecognition"], "SpeechRecognition")
+    else:
+        print("Invalid choice.")
+    
+    os.unlink(audio_file)
+    print("Done!")
 
-# Create a temporary WAV file for extracted audio
-temp_wav = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-temp_wav_name = temp_wav.name
-temp_wav.close()  # Let ffmpeg write to this file
-
-# Build the ffmpeg command to extract audio from the video
-command = f'ffmpeg -i "{video_file}" -q:a 0 -map a "{temp_wav_name}"'
-print("Running command:", command)
-
-try:
-    subprocess.run(command, shell=True, check=True)
-except subprocess.CalledProcessError as e:
-    print("Error running ffmpeg command:", e)
-    os.unlink(temp_wav_name)
-    exit(1)
-
-if os.path.getsize(temp_wav_name) == 0:
-    print("Extracted audio file is empty. Check if the video contains audio.")
-    os.unlink(temp_wav_name)
-    exit(1)
-
-# Transcribe the audio in chunks and get the combined transcription
-print("Starting transcription...")
-full_transcription = transcribe_long_audio(temp_wav_name, chunk_length=60)
-
-# Save the transcription to a text file in the original location of the video file
-video_dir = os.path.dirname(video_file)
-video_basename = os.path.splitext(os.path.basename(video_file))[0]
-transcription_file = os.path.join(video_dir, f"{video_basename}_transcription.txt")
-
-with open(transcription_file, "w") as f:
-    f.write(full_transcription)
-
-print(f"\nFull Transcription saved to {transcription_file}")
-
-# Clean up the temporary WAV file
-os.unlink(temp_wav_name)
+if __name__ == "__main__":
+    main()
