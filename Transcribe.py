@@ -91,34 +91,10 @@ def save_transcription(video_file, transcribed_text, tool_name):
         f.write(transcribed_text)
     print(f"Transcription saved to {transcription_file}")
 
-def main():
-    """
-    Main function that handles user input and transcription process.
-    """
-    video_file = input("Enter the video file path: ")
-    if not os.path.exists(video_file):
-        print("The file does not exist.")
-        return
-    
-    print("Select transcription tool:")
-    print("1 - OpenAI Whisper")
-    print("2 - Google SpeechRecognition")
-    print("3 - Both (Simultaneously)")
-    choice = input("Enter the number: ")
-    
-    if choice == "1":
-        model_size = input("Choose Whisper model (tiny, base, small, medium, large): ") or "base"
-    else:
-        model_size = "base"
-    
-    if choice in ["2", "3"]:
-        chunk_size = int(input("Enter chunk size for SpeechRecognition (default: 15000ms): ") or 15000)
-    else:
-        chunk_size = 15000
-    
+def process_video_file(video_file, choice, model_size, chunk_size):
     audio_file = extract_audio(video_file)
     if not audio_file:
-        print("Failed to extract audio.")
+        print(f"Failed to extract audio from {video_file}.")
         return
     
     result_dict = {}  # Dictionary to store transcription results
@@ -151,7 +127,41 @@ def main():
         print("Invalid choice.")
     
     os.unlink(audio_file)  # Remove temporary audio file
-    print("Done!")
+    print(f"Done processing {video_file}!")
+
+def main():
+    """
+    Main function that handles user input and transcription process.
+    """
+    folder_path = input("Enter the folder path containing video files: ")
+    if not os.path.exists(folder_path):
+        print("The folder does not exist.")
+        return
+    
+    print("Select transcription tool:")
+    print("1 - OpenAI Whisper")
+    print("2 - Google SpeechRecognition")
+    print("3 - Both (Simultaneously)")
+    choice = input("Enter the number: ")
+    
+    if choice == "1":
+        model_size = input("Choose Whisper model (tiny, base, small, medium, large): ") or "base"
+    else:
+        model_size = "base"
+    
+    if choice in ["2", "3"]:
+        chunk_size = int(input("Enter chunk size for SpeechRecognition (default: 15000ms): ") or 15000)
+    else:
+        chunk_size = 15000
+    
+    video_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov'))]
+    
+    if not video_files:
+        print("No video files found in the specified folder.")
+        return
+    
+    for video_file in video_files:
+        process_video_file(video_file, choice, model_size, chunk_size)
 
 if __name__ == "__main__":
     main()
